@@ -647,6 +647,7 @@ public final class KafkaConnectUtils {
     props.put("topic.prefix", connectorName);
     props.put("scylla.table.names", tableName);
     props.put("name", connectorName);
+    props.put("cdc.output.format", "advanced");
     props.put("cdc.include.before", "full");
     props.put("cdc.include.after", "full");
     props.put("cdc.include.primary-key.placement", DEFAULT_PK_PLACEMENT);
@@ -695,6 +696,35 @@ public final class KafkaConnectUtils {
     KafkaConsumer<String, String> consumer = KafkaUtils.createStringConsumer();
     Properties connectorConfiguration = KafkaConnectUtils.createCommonConnectorProperties();
     applyCommonCdcConfig(connectorConfiguration, connectorConfigName, tableName);
+    registerAndSubscribe(consumer, connectorConfigName, tableName, connectorConfiguration);
+    return consumer;
+  }
+
+  static KafkaConsumer<String, String> buildLegacyPlainConnector(
+      String connectorConfigName, String tableName, boolean preimagesEnabled) {
+    KafkaConsumer<String, String> consumer = KafkaUtils.createStringConsumer();
+    Properties connectorConfiguration = KafkaConnectUtils.createCommonConnectorProperties();
+    applyCommonCdcConfig(connectorConfiguration, connectorConfigName, tableName);
+    connectorConfiguration.put("cdc.output.format", "legacy");
+    // Legacy mode uses experimental.preimages.enabled instead of cdc.include.before/after
+    connectorConfiguration.put("experimental.preimages.enabled", String.valueOf(preimagesEnabled));
+    registerAndSubscribe(consumer, connectorConfigName, tableName, connectorConfiguration);
+    return consumer;
+  }
+
+  static KafkaConsumer<String, String> buildLegacyScyllaExtractNewRecordStateConnector(
+      String connectorConfigName, String tableName) {
+    KafkaConsumer<String, String> consumer = KafkaUtils.createStringConsumer();
+    Properties connectorConfiguration = KafkaConnectUtils.createCommonConnectorProperties();
+    applyCommonCdcConfig(connectorConfiguration, connectorConfigName, tableName);
+    connectorConfiguration.put("cdc.output.format", "legacy");
+    // Legacy mode uses experimental.preimages.enabled instead of cdc.include.before/after
+    connectorConfiguration.put("transforms", "extractNewRecordState");
+    connectorConfiguration.put(
+        "transforms.extractNewRecordState.type",
+        "com.scylladb.cdc.debezium.connector.transforms.ScyllaExtractNewRecordState");
+    // Keep tombstone records for DELETE events (default is to drop them)
+    connectorConfiguration.put("transforms.extractNewRecordState.drop.tombstones", "false");
     registerAndSubscribe(consumer, connectorConfigName, tableName, connectorConfiguration);
     return consumer;
   }
