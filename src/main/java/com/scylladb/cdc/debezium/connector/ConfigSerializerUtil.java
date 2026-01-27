@@ -199,7 +199,76 @@ public class ConfigSerializerUtil {
   }
 
   /**
+   * Validates that experimental.preimages.enabled is not set to true when
+   * cdc.output.format=advanced.
+   *
+   * <p>The experimental.preimages.enabled option is only applicable for legacy mode. When using
+   * advanced mode, users should use cdc.include.before and cdc.include.after instead.
+   *
+   * @param config the configuration
+   * @param field the field being validated
+   * @param problems output for validation problems
+   * @return the number of validation errors found
+   */
+  public static int validatePreimagesEnabled(
+      Configuration config, Field field, Field.ValidationOutput problems) {
+    boolean preimagesEnabled = config.getBoolean(field);
+    String outputFormat = config.getString(ScyllaConnectorConfig.CDC_OUTPUT_FORMAT);
+
+    if (preimagesEnabled
+        && outputFormat != null
+        && ScyllaConnectorConfig.CdcOutputFormat.parse(outputFormat)
+            == ScyllaConnectorConfig.CdcOutputFormat.ADVANCED) {
+      problems.accept(
+          field,
+          String.valueOf(preimagesEnabled),
+          "experimental.preimages.enabled=true is not compatible with cdc.output.format=advanced. "
+              + "For advanced mode, use cdc.include.before and cdc.include.after instead.");
+      return 1;
+    }
+    return 0;
+  }
+
+  /**
+   * Validates the cdc.include.before configuration value.
+   *
+   * <p>The cdc.include.before option is only applicable for advanced mode. When using legacy mode,
+   * this setting is ignored (legacy mode uses experimental.preimages.enabled instead).
+   *
+   * @param config the configuration
+   * @param field the field being validated
+   * @param problems output for validation problems
+   * @return the number of validation errors found
+   */
+  public static int validateCdcIncludeBefore(
+      Configuration config, Field field, Field.ValidationOutput problems) {
+    // No validation errors - in legacy mode, this setting is simply ignored
+    // and the connector uses experimental.preimages.enabled instead
+    return 0;
+  }
+
+  /**
+   * Validates the cdc.include.after configuration value.
+   *
+   * <p>The cdc.include.after option is only applicable for advanced mode. When using legacy mode,
+   * this setting is ignored (legacy mode does not support postimages).
+   *
+   * @param config the configuration
+   * @param field the field being validated
+   * @param problems output for validation problems
+   * @return the number of validation errors found
+   */
+  public static int validateCdcIncludeAfter(
+      Configuration config, Field field, Field.ValidationOutput problems) {
+    // No validation errors - in legacy mode, this setting is simply ignored
+    return 0;
+  }
+
+  /**
    * Validates the cdc.include.primary-key.placement configuration value.
+   *
+   * <p>This validation is only applied when cdc.output.format=advanced. For legacy mode, this
+   * configuration is ignored.
    *
    * @param config the configuration
    * @param field the field being validated
@@ -208,6 +277,14 @@ public class ConfigSerializerUtil {
    */
   public static int validateCdcIncludePk(
       Configuration config, Field field, Field.ValidationOutput problems) {
+    // Skip validation for legacy mode - this config is only used in advanced mode
+    String outputFormat = config.getString(ScyllaConnectorConfig.CDC_OUTPUT_FORMAT);
+    if (outputFormat != null
+        && ScyllaConnectorConfig.CdcOutputFormat.parse(outputFormat)
+            == ScyllaConnectorConfig.CdcOutputFormat.LEGACY) {
+      return 0;
+    }
+
     String value = config.getString(field);
     if (value == null || value.trim().isEmpty()) {
       problems.accept(field, value, "cdc.include.primary-key.placement must be specified");
